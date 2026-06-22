@@ -19,10 +19,12 @@ from google.oauth2.service_account import Credentials
 # ============================================================
 
 SEARCH_KEYWORDS = [
-    "AI short film dystopia",
-    "AI cinematic sci-fi short",
-    "horror short film viral",
-    "thriller short film viral",
+    "creative transition reel",
+    "simple concept video viral",
+    "one person short film idea",
+    "dystopian sci-fi short film",
+    "surreal short video",
+    "mind blowing edit reels",
 ]
 
 # 검색 결과 중 며칠 이내 업로드된 영상만 볼지 (너무 오래된 영상 제외)
@@ -67,6 +69,7 @@ def search_videos(keyword: str) -> list[str]:
         "maxResults": MAX_RESULTS_PER_KEYWORD,
         "key": YOUTUBE_API_KEY,
         "relevanceLanguage": "en",
+        # videoDuration 필터 없음 — 쇼츠/릴스(짧은 영상)부터 롱폼까지 전부 검색됨
     }
     res = requests.get(YOUTUBE_SEARCH_URL, params=params, timeout=20)
     res.raise_for_status()
@@ -79,7 +82,7 @@ def get_video_stats(video_ids: list[str]) -> list[dict]:
     if not video_ids:
         return []
     params = {
-        "part": "snippet,statistics",
+        "part": "snippet,statistics,contentDetails",
         "id": ",".join(video_ids),
         "key": YOUTUBE_API_KEY,
     }
@@ -89,6 +92,7 @@ def get_video_stats(video_ids: list[str]) -> list[dict]:
 
     results = []
     for item in data.get("items", []):
+        duration_iso = item.get("contentDetails", {}).get("duration", "")
         results.append({
             "video_id": item["id"],
             "title": item["snippet"]["title"],
@@ -96,6 +100,7 @@ def get_video_stats(video_ids: list[str]) -> list[dict]:
             "channel_title": item["snippet"]["channelTitle"],
             "published_at": item["snippet"]["publishedAt"],
             "view_count": int(item["statistics"].get("viewCount", 0)),
+            "duration": duration_iso,  # 예: PT45S(쇼츠/릴스 성격), PT12M30S(롱폼)
             "url": f"https://youtube.com/watch?v={item['id']}",
         })
     return results
@@ -167,13 +172,13 @@ def save_to_sheets(rows: list[dict]):
     if sheet.row_count == 0 or not sheet.row_values(1):
         sheet.append_row([
             "checked_at", "title", "channel_title", "view_count",
-            "subscriber_count", "view_to_sub_ratio", "published_at", "url"
+            "subscriber_count", "view_to_sub_ratio", "duration", "published_at", "url"
         ])
 
     for r in rows:
         sheet.append_row([
             r["checked_at"], r["title"], r["channel_title"], r["view_count"],
-            r["subscriber_count"], r["view_to_sub_ratio"], r["published_at"], r["url"]
+            r["subscriber_count"], r["view_to_sub_ratio"], r["duration"], r["published_at"], r["url"]
         ])
 
     print(f"[완료] {len(rows)}개 후보를 Google Sheets에 저장했습니다.")
@@ -186,7 +191,7 @@ def save_to_csv(rows: list[dict]):
     with open(filename, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
             "checked_at", "title", "channel_title", "view_count",
-            "subscriber_count", "view_to_sub_ratio", "published_at", "url"
+            "subscriber_count", "view_to_sub_ratio", "duration", "published_at", "url"
         ])
         if not file_exists:
             writer.writeheader()
