@@ -1,0 +1,39 @@
+name: YouTube Viral Tracker
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run-tracker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 패키지 설치
+        run: pip install requests gspread google-auth
+
+      - name: 트래커 실행
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+          SPREADSHEET_NAME: "viral-tracker"
+        run: python tracker.py
+
+      - name: CSV 결과 커밋 (Sheets 연결 전 임시용)
+        if: always()
+        run: |
+          if [ -f results.csv ]; then
+            git config user.name "viral-tracker-bot"
+            git config user.email "bot@example.com"
+            git add results.csv
+            git commit -m "update results $(date -u)" || echo "변경사항 없음"
+            git push
+          fi
