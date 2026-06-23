@@ -4,7 +4,7 @@ YouTube 바이럴 신호 트래커
 - 조회수/구독자수 대비 비정상적 증가량(이상치) 탐지
 - 결과를 Google Sheets에 자동 누적 기록
 
-실행 방식: GitHub Actions에서 3~6시간마다 자동 실행
+실행 방식: GitHub Actions에서 6시간마다 자동 실행 (하루 4회 — tracker.yml에서 별도로 맞춰야 함)
 """
 
 import os
@@ -26,6 +26,15 @@ SEARCH_KEYWORDS = [
     "surreal short video",
     "mind blowing edit reels",
 ]
+
+# 검색 결과를 어느 나라 시청자 기준으로 볼지 (ISO 3166-1 국가코드, 예: US/GB/JP)
+# 주의: 이건 "영상을 올린 사람의 국적"을 거르는 기능이 아니라,
+# "그 나라 시청자한테 보이는 화면 기준으로 검색 결과를 본다"는 뜻임.
+# 그래도 그 나라에서 잘 보이는 콘텐츠 쪽으로 결과가 어느 정도 쏠리는 효과는 있음.
+# "유럽"은 국가코드 하나로 못 묶어서, 일단 US + JP 2개로 잡음 — 유럽 특정 국가(GB/FR/DE 등)로
+# 바꾸고 싶으면 이 리스트 값만 바꾸면 됨.
+# 국가를 늘릴수록 search_videos 호출이 국가 수만큼 곱해져서 쿼터 사용량도 그만큼 늘어남.
+REGION_CODES = ["US", "JP"]
 
 # 검색 결과 중 며칠 이내 업로드된 영상만 볼지 (너무 오래된 영상 제외)
 PUBLISHED_AFTER_DAYS = 14
@@ -54,8 +63,8 @@ YOUTUBE_CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels"
 # 2. YouTube 데이터 수집
 # ============================================================
 
-def search_videos(keyword: str) -> list[str]:
-    """키워드로 영상 검색 → video_id 리스트 반환"""
+def search_videos(keyword: str, region: str) -> list[str]:
+    """키워드+국가로 영상 검색 → video_id 리스트 반환"""
     published_after = (
         datetime.datetime.utcnow() - datetime.timedelta(days=PUBLISHED_AFTER_DAYS)
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -69,6 +78,7 @@ def search_videos(keyword: str) -> list[str]:
         "maxResults": MAX_RESULTS_PER_KEYWORD,
         "key": YOUTUBE_API_KEY,
         "relevanceLanguage": "en",
+        "regionCode": region,
         # videoDuration 필터 없음 — 쇼츠/릴스(짧은 영상)부터 롱폼까지 전부 검색됨
     }
     res = requests.get(YOUTUBE_SEARCH_URL, params=params, timeout=20)
@@ -205,14 +215,17 @@ def save_to_csv(rows: list[dict]):
 # ============================================================
 
 def main():
-    all_videos = []
-    for keyword in SEARCH_KEYWORDS:
-        print(f"[검색중] {keyword}")
-        try:
-            video_ids = search_videos(keyword)
-            all_videos.extend(get_video_stats(video_ids))
-        except requests.HTTPError as e:
-            print(f"[에러] '{keyword}' 검색 실패: {e}")
+    video_id_set = set()
+    for region in REGION_CODES:
+        for keyword in SEARCH_KEYWORDS:
+            print(f"[검색중] ({region}) {keyword}")
+            try:
+                video_ids = search_videos(keyword, region)
+                video_id_set.update(video_ids)  # 같은 영상이 다른 국가/키워드에서 또 잡혀도 한 번만 처리됨
+            except requests.HTTPError as e:
+                print(f"[에러] ({region}) '{keyword}' 검색 실패: {e}")
+
+    all_videos = get_video_stats(list(video_id_set))
 
     if not all_videos:
         print("[결과] 검색된 영상이 없습니다.")
