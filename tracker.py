@@ -8,6 +8,7 @@ YouTube 바이럴 신호 트래커
 """
 
 import os
+import csv
 import json
 import datetime
 import requests
@@ -91,28 +92,33 @@ def get_video_stats(video_ids: list[str]) -> list[dict]:
     """video_id 리스트 → 조회수/채널ID/제목 등 상세 정보"""
     if not video_ids:
         return []
-    params = {
-        "part": "snippet,statistics,contentDetails",
-        "id": ",".join(video_ids),
-        "key": YOUTUBE_API_KEY,
-    }
-    res = requests.get(YOUTUBE_VIDEOS_URL, params=params, timeout=20)
-    res.raise_for_status()
-    data = res.json()
 
     results = []
-    for item in data.get("items", []):
-        duration_iso = item.get("contentDetails", {}).get("duration", "")
-        results.append({
-            "video_id": item["id"],
-            "title": item["snippet"]["title"],
-            "channel_id": item["snippet"]["channelId"],
-            "channel_title": item["snippet"]["channelTitle"],
-            "published_at": item["snippet"]["publishedAt"],
-            "view_count": int(item["statistics"].get("viewCount", 0)),
-            "duration": duration_iso,  # 예: PT45S(쇼츠/릴스 성격), PT12M30S(롱폼)
-            "url": f"https://youtube.com/watch?v={item['id']}",
-        })
+    # videos.list는 한 번에 최대 50개 id까지만 허용 (51개 이상이면 400 에러)
+    # 국가를 2개로 늘리면서 video_id 모음이 50개를 넘는 경우가 생겨서 이 청크 처리가 꼭 필요해짐
+    for i in range(0, len(video_ids), 50):
+        chunk = video_ids[i:i + 50]
+        params = {
+            "part": "snippet,statistics,contentDetails",
+            "id": ",".join(chunk),
+            "key": YOUTUBE_API_KEY,
+        }
+        res = requests.get(YOUTUBE_VIDEOS_URL, params=params, timeout=20)
+        res.raise_for_status()
+        data = res.json()
+
+        for item in data.get("items", []):
+            duration_iso = item.get("contentDetails", {}).get("duration", "")
+            results.append({
+                "video_id": item["id"],
+                "title": item["snippet"]["title"],
+                "channel_id": item["snippet"]["channelId"],
+                "channel_title": item["snippet"]["channelTitle"],
+                "published_at": item["snippet"]["publishedAt"],
+                "view_count": int(item["statistics"].get("viewCount", 0)),
+                "duration": duration_iso,  # 예: PT45S(쇼츠/릴스 성격), PT12M30S(롱폼)
+                "url": f"https://youtube.com/watch?v={item['id']}",
+            })
     return results
 
 
@@ -195,7 +201,6 @@ def save_to_sheets(rows: list[dict]):
 
 
 def save_to_csv(rows: list[dict]):
-    import csv
     filename = "results.csv"
     file_exists = os.path.exists(filename)
     with open(filename, "a", newline="", encoding="utf-8") as f:
@@ -208,6 +213,38 @@ def save_to_csv(rows: list[dict]):
         for r in rows:
             writer.writerow({k: r[k] for k in writer.fieldnames})
     print(f"[완료] {len(rows)}개 후보를 {filename}에 저장했습니다.")
+
+
+def load_existing_urls() -> set[str]:
+    """이미 저장돼 있는 영상의 url을 모아서 반환 — 다음 검색에서 똑같은 영상을 또 저장하지 않게 거르는 용도.
+    인기 영상은 14일(PUBLISHED_AFTER_DAYS) 동안 매 실행마다 계속 다시 잡힐 수 있어서,
+    이 체크 없이는 같은 영상이 하루 4번 × 14일 = 최대 56번까지 중복으로 쌓일 수 있음."""
+    if GOOGLE_SHEETS_CREDENTIALS:
+        try:
+            creds_dict = json.loads(GOOGLE_SHEETS_CREDENTIALS)
+            scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+            client = gspread.authorize(creds)
+            sheet = client.open(SPREADSHEET_NAME).sheet1
+            header = sheet.row_values(1)
+            if "url" not in header:
+                return set()
+            url_col_index = header.index("url") + 1  # gspread 칸 번호는 1부터 시작
+            return {v for v in sheet.col_values(url_col_index)[1:] if v}
+        except Exception as e:
+            print(f"[알림] 기존 Sheets 데이터 확인 실패, 중복 체크 없이 진행합니다: {e}")
+            return set()
+    else:
+        filename = "results.csv"
+        if not os.path.exists(filename):
+            return set()
+        try:
+            with open(filename, "r", newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                return {row["url"] for row in reader if row.get("url")}
+        except Exception as e:
+            print(f"[알림] 기존 {filename} 확인 실패, 중복 체크 없이 진행합니다: {e}")
+            return set()
 
 
 # ============================================================
@@ -237,10 +274,19 @@ def main():
     candidates = calculate_signals(all_videos, sub_counts)
     print(f"[결과] 후보 {len(candidates)}건 발견 (기준: 조회수/구독자 ≥ {ANOMALY_THRESHOLD})")
 
-    if candidates:
-        save_to_sheets(candidates)
-    else:
+    if not candidates:
         print("[결과] 기준을 넘는 후보가 없습니다.")
+        return
+
+    existing_urls = load_existing_urls()
+    new_candidates = [c for c in candidates if c["url"] not in existing_urls]
+    skipped = len(candidates) - len(new_candidates)
+    print(f"[결과] 이미 저장된 영상 {skipped}건 제외 → 신규 저장 대상 {len(new_candidates)}건")
+
+    if new_candidates:
+        save_to_sheets(new_candidates)
+    else:
+        print("[결과] 전부 이미 저장된 영상이라 새로 저장할 후보가 없습니다.")
 
 
 if __name__ == "__main__":
