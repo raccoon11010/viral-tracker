@@ -21,7 +21,7 @@ from google.oauth2.service_account import Credentials
 
 SEARCH_KEYWORDS = [
     "creative transition reel",
-    "simple concept video viral",
+    "liminal space short film",  # "simple concept video viral"에서 교체 — "viral"이 너무 흔해서 동남아 밈 콘텐츠를 끌어오던 단어였음. 새 카테고리(글리치·이미지오류)에 맞춤
     "one person short film idea",
     "dystopian sci-fi short film",
     "surreal short video",
