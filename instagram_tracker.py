@@ -17,7 +17,7 @@ import requests
 
 KEYWORDS = [
     "mystery",
-    "viral",
+    "glitch art",  # "viral"을 빼고 새 카테고리(글리치·이미지오류)에 맞는 키워드로 교체 — 키워드 수는 5개 그대로라 비용 변화 없음
     "transition",
     "scifi",
     "shortfilm",
@@ -98,3 +98,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
