@@ -17,10 +17,12 @@ import requests
 
 KEYWORDS = [
     "mystery",
-    "glitch art",  # "viral"을 빼고 새 카테고리(글리치·이미지오류)에 맞는 키워드로 교체 — 키워드 수는 5개 그대로라 비용 변화 없음
+    "glitch art",  # "viral"을 빼고 새 카테고리(글리치·이미지오류)에 맞는 키워드로 교체
     "transition",
     "scifi",
     "shortfilm",
+    "post-apocalyptic city",  # "urban exploration"에서 교체 — urbex 브이로그 노이즈 줄이고 틈 제작에도 직접 도움됨
+    "zombie",  # 신규 — 틈의 군체/감염 비주얼 참고용
 ]
 
 MAX_PAGES_PER_KEYWORD = 1  # 페이지당 약 10~12개 수집됨, 늘리면 더 많이/비싸짐
