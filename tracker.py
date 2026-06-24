@@ -26,6 +26,8 @@ SEARCH_KEYWORDS = [
     "dystopian sci-fi short film",
     "surreal short video",
     "mind blowing edit reels",
+    "post-apocalyptic ruined city",  # "urban exploration night city"에서 교체 — 그 단어는 수다떠는 폐건물 탐험 브이로그를 끌어왔음. 틈 제작(메테오 충돌 이후 폐허 도시)에도 직접 도움됨
+    "zombie outbreak short film",  # 신규 — 틈의 군체/감염 비주얼 참고용
 ]
 
 # 검색 결과를 어느 나라 시청자 기준으로 볼지 (ISO 3166-1 국가코드, 예: US/GB/JP)
